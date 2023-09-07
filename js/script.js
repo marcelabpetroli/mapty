@@ -65,15 +65,23 @@ class Cycling extends Workout {
 class App {
   // Private instance properties -- they'll be present on all the instances created through this class
   #map;
+  #mapZoomLevel = 13;
   #mapEvent;
   #workouts = [];
 
   // Called automatically when a new object is created from the class.
   constructor() {
+    // Get user's position
     this._getPosition();
+
+    // Get data from LS
+    this._getLocalStorage();
+
     // Event handler functions will always have the 'this' keyword of the DOM element onto which it is attached -- Form element
+    // Attach event handlers
     form.addEventListener('submit', this._newWorkout.bind(this));
     inputType.addEventListener('change', this._toggleElevationField);
+    containerWorkouts.addEventListener('click', this._moveToPopup.bind(this));
   }
 
   _getPosition() {
@@ -93,8 +101,7 @@ class App {
     const { longitude } = position.coords;
     const coords = [latitude, longitude];
 
-    // The second value in setView is for controlling the zoom
-    this.#map = L.map('map').setView(coords, 13);
+    this.#map = L.map('map').setView(coords, this.#mapZoomLevel);
 
     L.tileLayer('https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
       attribution:
@@ -104,6 +111,11 @@ class App {
     // Handling clicks on map
     // Instead of an eventListener, we use this method coming from leaflet
     this.#map.on('click', this._showForm.bind(this));
+
+    // For data coming from LS
+    // Can't call this function in getLocalStorage cause at this time, #map doesn't exist.
+    // prettier-ignore
+    this.#workouts.forEach(workout => {this._renderWorkoutMarker(workout)});
   }
 
   _showForm(mapE) {
@@ -145,10 +157,9 @@ class App {
     const { lat, lng } = this.#mapEvent.latlng;
     let workout;
 
-    // If workout is running, create running object
     if (type === 'running') {
       const cadence = +inputCadence.value;
-      // Check if the data is valid
+      // Validate data
       if (
         !validInputs(distance, duration, cadence) ||
         !allPositive(distance, duration, cadence)
@@ -158,10 +169,9 @@ class App {
       workout = new Running([lat, lng], distance, duration, cadence);
     }
 
-    // If workout is cycling, create cycling object
     if (type === 'cycling') {
       const elevation = +inputElevation.value;
-      // Check if the data is valid
+      // Validate data
       if (
         !validInputs(distance, duration, elevation) ||
         !allPositive(distance, duration)
@@ -182,6 +192,9 @@ class App {
 
     // Hide the form + clear input fields
     this._hideForm();
+
+    // Set local storage to all workouts
+    this._setLocalStorage();
   }
 
   _renderWorkoutMarker(workout) {
@@ -251,6 +264,37 @@ class App {
     `;
 
     form.insertAdjacentHTML('afterend', html);
+  }
+
+  _moveToPopup(e) {
+    const workoutEl = e.target.closest('.workout');
+
+    if (!workoutEl) return;
+
+    // prettier-ignore
+    const workout = this.#workouts.find(workout => workout.id === workoutEl.dataset.id);
+
+    this.#map.setView(workout.coords, this.#mapZoomLevel, {
+      animate: true,
+      pan: {
+        duration: 1,
+      },
+    });
+  }
+
+  _setLocalStorage() {
+    localStorage.setItem('workouts', JSON.stringify(this.#workouts));
+  }
+
+  _getLocalStorage() {
+    const data = JSON.parse(localStorage.getItem('workouts'));
+
+    if (!data) return;
+
+    this.#workouts = data;
+
+    // prettier-ignore
+    this.#workouts.forEach(workout => {this._renderWorkout(workout)})
   }
 }
 
